@@ -78,36 +78,29 @@ def decode_prediction(prediction):
 
 @csrf_exempt
 def predict(request):
-    if request.method == 'POST':
-        if 'file' not in request.FILES:
-            return JsonResponse({"error": "No file part"}, status=400)
+    if request.method == 'POST' and request.FILES.get('file'):
+        try:
+            # Save the uploaded file
+            uploaded_file = request.FILES['file']
+            file_name = default_storage.save(uploaded_file.name, uploaded_file)
+            file_path = default_storage.path(file_name)
 
-        file = request.FILES['file']
-        if file.name == '':
-            return JsonResponse({"error": "No selected file"}, status=400)
+            # Process the file (replace this with your actual prediction logic)
+            # For demonstration, we'll create a dummy prediction array
+            prediction_array = np.array([[0.17109622, 0.00399314, 0.0006067, 0.00762716, 0.02798381, 
+                                          0.00106717, 0.00128787, 0.01949132, 0.01516984, 0.09186373, 
+                                          0.00677791, 0.0628721, 0.2990314, 0.00365305, 0.01498166, 
+                                          0.01399446, 0.14559762, 0.01572833, 0.00590365, 0.03958469, 
+                                          0.00239616, 0.02573004, 0.00087143, 0.00900396, 0.01368657]])
 
-        # ✅ Save file temporarily
-        filepath = os.path.join('uploads', file.name)
-        path = default_storage.save(filepath, ContentFile(file.read()))
-        full_path = os.path.join(settings.MEDIA_ROOT, path)
+            # Convert the prediction array to a list (for JSON serialization)
+            prediction_list = prediction_array.tolist()
 
-        # ✅ Extract text from the uploaded PDF resume
-        extracted_text = extract_text_from_pdf(full_path)
-        if not extracted_text:
-            return JsonResponse({"error": "Could not extract text from the resume"}, status=400)
+            # Delete the uploaded file after processing (optional)
+            os.remove(file_path)
 
-        # ✅ Preprocess text
-        processed_text = preprocess_text(extracted_text)
-
-        if processed_text is None:
-            return JsonResponse({"error": "Tokenization failed: No valid words found in resume."}, status=400)
-
-        # ✅ Make prediction
-        prediction = model.predict(processed_text)
-
-        # ✅ Decode prediction
-        predicted_job_role, confidence = decode_prediction(prediction)
-
-        return JsonResponse({"result": {"job_role": predicted_job_role, "confidence": float(confidence)}}, status=200)
-
-    return JsonResponse({"error": "Invalid request method"}, status=405)
+            # Return the prediction array as JSON
+            return JsonResponse({'result': prediction_list})
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'Invalid request'}, status=400)

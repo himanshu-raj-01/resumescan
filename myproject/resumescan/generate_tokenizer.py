@@ -1,5 +1,5 @@
 import pickle
-from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.text import Tokenizer # type: ignore
 
 # Sample data to fit tokenizer (Replace this with your training data)
 texts = ["Software Engineer", "Data Scientist", "Product Manager", "Cybersecurity Analyst", "ML Engineer"]
