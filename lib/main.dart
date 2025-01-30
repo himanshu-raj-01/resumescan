@@ -3,7 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
-import 'chatbot.dart';
 
 void main() {
   runApp(const MyApp());
@@ -39,29 +38,39 @@ class _ResumeScannerState extends State<ResumeScanner> with SingleTickerProvider
   bool _isLoading = false;
   String _scanResult = '';
   late AnimationController _animationController;
-  late Animation<double> _animation;
+  late Animation<double> _scaleAnimation;
+  late Animation<Color?> _colorAnimation;
+  late Animation<Offset> _floatingAnimation;
 
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 5),
+      duration: const Duration(seconds: 3),
     );
-    _animation = TweenSequence([ 
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 0.0, end: 5.0).chain(CurveTween(curve: Curves.easeIn)),
-        weight: 50.0,
+
+    _scaleAnimation = Tween<double>(begin: 0.9, end: 1.1).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
       ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 5.5).chain(CurveTween(curve: Curves.bounceOut)),
-        weight: 30.0,
+    );
+
+    _colorAnimation = ColorTween(
+      begin: Colors.blueAccent,
+      end: Colors.purpleAccent,
+    ).animate(_animationController);
+
+    _floatingAnimation = Tween<Offset>(
+      begin: const Offset(0, 0),
+      end: const Offset(0, -0.1),
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
       ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 0.5, end: 5.0).chain(CurveTween(curve: Curves.elasticInOut)),
-        weight: 20.0,
-      ),
-    ]).animate(_animationController);
+    );
 
     _animationController.repeat(reverse: true);
   }
@@ -127,7 +136,7 @@ class _ResumeScannerState extends State<ResumeScanner> with SingleTickerProvider
 
       if (response.statusCode == 200) {
         var decodedResponse = jsonDecode(response.body);
-        
+
         // Extracting and formatting the prediction array
         if (decodedResponse.containsKey('result')) {
           var predictions = decodedResponse['result'];
@@ -151,89 +160,176 @@ class _ResumeScannerState extends State<ResumeScanner> with SingleTickerProvider
     }
   }
 
-  Widget _buildFeatureRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: Colors.grey[600]),
-          const SizedBox(width: 10),
-          Expanded(child: Text(text, style: TextStyle(color: Colors.grey[800]))),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Resume Scanner'),
         centerTitle: true,
-        backgroundColor: const Color.fromARGB(255, 137, 185, 240),
-        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blueAccent, Colors.purpleAccent],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        elevation: 10,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(30.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const Text(
-              'Upload your resume',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color.fromARGB(255, 2, 26, 61)),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'and let the right job find you!',
-              style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 40),
-            Container(
-              width: MediaQuery.of(context).size.width * .8,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade400, width: 1),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, spreadRadius: 1),
-                ],
-              ),
-              padding: const EdgeInsets.all(20),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                Icon(Icons.upload_file, size: 60, color: Colors.grey[600]),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _pickFile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF673AB7),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 30),
-                    textStyle: const TextStyle(fontSize: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+      body: Stack(
+        children: [
+          // Parallax Background
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, _floatingAnimation.value.dy * 50),
+                  child: Opacity(
+                    opacity: 0.3,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.blue.shade50, Colors.purple.shade50],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
                     ),
                   ),
-                  child: _isLoading
-                      ? FadeTransition(
-                          opacity: _animation,
-                          child: const Icon(Icons.cloud_upload, size: 24, color: Colors.white),
-                        )
-                      : const Text('Upload Your Resume'),
+                );
+              },
+            ),
+          ),
+          // Floating Icons
+          Positioned(
+            top: 100,
+            left: 20,
+            child: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, _floatingAnimation.value.dy * 20),
+                  child: Icon(Icons.description, size: 40, color: Colors.blue.withOpacity(0.5)),
+                );
+              },
+            ),
+          ),
+          Positioned(
+            top: 200,
+            right: 30,
+            child: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, _floatingAnimation.value.dy * 30),
+                  child: Icon(Icons.work, size: 50, color: Colors.purple.withOpacity(0.5)),
+                );
+              },
+            ),
+          ),
+          Positioned(
+            bottom: 100,
+            left: 50,
+            child: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, _floatingAnimation.value.dy * 40),
+                  child: Icon(Icons.cloud_upload, size: 60, color: Colors.blue.withOpacity(0.5)),
+                );
+              },
+            ),
+          ),
+          // Main Content
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(30.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Text(
+                  'Upload your resume',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                  textAlign: TextAlign.center,
                 ),
-              ]),
+                const SizedBox(height: 10),
+                Text(
+                  'and let the right job find you!',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 40),
+                AnimatedBuilder(
+                  animation: _animationController,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: _scaleAnimation.value,
+                      child: Container(
+                        width: MediaQuery.of(context).size.width * .8,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.blue.shade100, Colors.purple.shade100],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 10,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Icon(Icons.upload_file, size: 60, color: _colorAnimation.value),
+                            const SizedBox(height: 20),
+                            ElevatedButton(
+                              onPressed: _isLoading ? null : _pickFile,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _colorAnimation.value,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 30),
+                                textStyle: const TextStyle(fontSize: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 5,
+                              ),
+                              child: _isLoading
+                                  ? FadeTransition(
+                                      opacity: _animationController,
+                                      child: const Icon(Icons.cloud_upload, size: 24, color: Colors.white),
+                                    )
+                                  : const Text('Upload Your Resume'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 40),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 500),
+                  child: Text(
+                    _scanResult,
+                    key: ValueKey<String>(_scanResult),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 40),
-            Text(
-              _scanResult,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
