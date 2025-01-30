@@ -1,5 +1,7 @@
+from django import views
 from django.contrib import admin
 from django.urls import path
+#from myproject.resumescan import views
 from resumescan.views import predict
 from django.conf import settings
 from django.conf.urls.static import static
