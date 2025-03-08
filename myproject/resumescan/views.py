@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 import pickle
 import PyPDF2  # Library for extracting text from PDFs
+import pandas as pd
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import default_storage
@@ -11,9 +12,8 @@ from django.conf import settings
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-
 # ✅ Load the trained TensorFlow model (Ensure it's in .h5 format)
-MODEL_PATH = os.path.join(settings.BASE_DIR, 'jobPredictionModel.h5')
+MODEL_PATH = os.path.join(settings.BASE_DIR, 'resume_predict_model.h5')
 model = tf.keras.models.load_model(MODEL_PATH)
 
 # ✅ Load the tokenizer used during training (Ensure it's in .pkl format)
@@ -22,14 +22,24 @@ with open(TOKENIZER_PATH, 'rb') as f:
     tokenizer = pickle.load(f)
 
 # ✅ Maximum sequence length used in training
-MAX_SEQUENCE_LENGTH = 500  
+MAX_SEQUENCE_LENGTH = 200  
 
-# ✅ List of job roles (Ensure these match the model's output labels)
-JOB_CLASSES = ["Software Engineer", "Data Scientist", "Product Manager", "Cybersecurity Analyst", "ML Engineer",
-    "Network Engineer", "Database Administrator", "Business Analyst", "AI Engineer", "Frontend Developer",
-    "Backend Developer", "DevOps Engineer", "Cloud Architect", "Security Analyst", "Software Architect",
-    "Mobile Developer", "Game Developer", "Blockchain Developer", "Technical Support", "Data Engineer",
-    "UI/UX Designer", "Embedded Engineer", "IT Manager", "Full Stack Developer", "Systems Administrator"]
+# ✅ Load job roles from the CSV file
+CSV_PATH = os.path.join(settings.BASE_DIR, 'UpdatedResumeDataSet.csv')
+
+# ✅ Read CSV and print column names for debugging
+df = pd.read_csv(CSV_PATH)
+df.columns = df.columns.str.strip()  # ✅ Remove extra spaces in column names
+
+print("CSV Column Names:", df.columns)  # Debugging print
+
+# ✅ Ensure correct column exists
+EXPECTED_COLUMN = "Category"  # Change this if needed
+if EXPECTED_COLUMN not in df.columns:
+    raise KeyError(f"Error: Column '{EXPECTED_COLUMN}' not found in CSV. Available columns: {df.columns}")
+
+# ✅ Load job titles
+JOB_CLASSES = df[EXPECTED_COLUMN].unique().tolist()
 
 def extract_text_from_pdf(filepath):
     """
@@ -48,33 +58,32 @@ def preprocess_text(extracted_text):
     """
     Converts raw text into a numerical sequence suitable for model prediction.
     """
-    extracted_text = extracted_text.lower()  # Convert to lowercase
-    sequence = tokenizer.texts_to_sequences([extracted_text])  # Tokenize text
+    extracted_text = extracted_text.lower()
+    sequence = tokenizer.texts_to_sequences([extracted_text])
 
     if not sequence or len(sequence[0]) == 0:
-        print("Error: Tokenized sequence is empty. Check the input text:", extracted_text)
-        return None  # Return None instead of an empty sequence
+        print("Error: Tokenization resulted in an empty sequence.")
+        return None
 
-    padded_sequence = pad_sequences(sequence, maxlen=MAX_SEQUENCE_LENGTH, padding='post')  # Pad sequence
+    padded_sequence = pad_sequences(sequence, maxlen=MAX_SEQUENCE_LENGTH, padding='post')
     return padded_sequence
 
-def decode_prediction(prediction):
+def decode_predictions(prediction):
     """
-    Decodes model output into a job role and confidence score.
+    Returns the top 5 predicted job roles, ensuring index safety.
     """
-    print("Prediction array:", prediction)  # Debugging print
+    num_classes = len(JOB_CLASSES)  # Get the actual number of job classes
+    top_indices = np.argsort(prediction[0])[-5:][::-1]  # Get top 5 indices
 
-    predicted_index = np.argmax(prediction)  # Get index of highest probability
+    # ✅ Ensure predicted indices do not exceed available job classes
+    valid_indices = [i for i in top_indices if i < num_classes]
 
-    # ✅ Fix: Ensure the predicted index is within the valid range
-    if predicted_index >= len(JOB_CLASSES):
-        print(f"Error: Predicted index {predicted_index} is out of range for JOB_CLASSES.")
-        return "Unknown", 0.0  # Return a default value instead of crashing
+    if not valid_indices:
+        print(f"Warning: No valid predictions found. Model output shape: {prediction.shape}")
+        return ["Unknown"]  # Default if no valid indices
 
-    predicted_job_role = JOB_CLASSES[predicted_index]  # Map index to job role
-    confidence = np.max(prediction) * 100  # Convert confidence to percentage
-
-    return predicted_job_role, confidence
+    predicted_roles = [JOB_CLASSES[i] for i in valid_indices]
+    return predicted_roles
 
 @csrf_exempt
 def predict(request):
@@ -98,16 +107,19 @@ def predict(request):
 
         # ✅ Preprocess text
         processed_text = preprocess_text(extracted_text)
-
         if processed_text is None:
             return JsonResponse({"error": "Tokenization failed: No valid words found in resume."}, status=400)
 
         # ✅ Make prediction
         prediction = model.predict(processed_text)
 
-        # ✅ Decode prediction
-        predicted_job_role, confidence = decode_prediction(prediction)
+        # ✅ Debugging: Print model output
+        print("Prediction shape:", prediction.shape)
+        print("Raw prediction array:", prediction)
 
-        return JsonResponse({"result": {"job_role": predicted_job_role, "confidence": float(confidence)}}, status=200)
+        # ✅ Decode prediction
+        predicted_job_roles = decode_predictions(prediction)
+
+        return JsonResponse({"result": {"job_roles": predicted_job_roles}}, status=200)
 
     return JsonResponse({"error": "Invalid request method"}, status=405)
